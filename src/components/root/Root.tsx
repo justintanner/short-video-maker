@@ -45,7 +45,7 @@ export const RemotionRoot: React.FC = () => {
                 { text: " Hello", startMs: 390, endMs: 990 },
                 { text: " World.", startMs: 990, endMs: 2000 },
               ],
-              video:
+              image:
                 "https://videos.pexels.com/video-files/4625747/4625747-hd_1080_1920_24fps.mp4",
               audio: {
                 url: "http://localhost:3123/api/tmp/cma1lgean0001rlsi52b8h3n3.mp3",
@@ -259,7 +259,7 @@ export const RemotionRoot: React.FC = () => {
                   endMs: 11000,
                 },
               ],
-              video:
+              image:
                 "https://videos.pexels.com/video-files/1168989/1168989-hd_1920_1080_30fps.mp4",
               audio: {
                 url: "http://localhost:3123/api/tmp/cma9ctvpo0001aqsia12i82db.mp3",

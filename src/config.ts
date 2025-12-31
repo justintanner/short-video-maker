@@ -37,7 +37,11 @@ export class Config {
   public tempDirPath: string;
   public packageDirPath: string;
   public musicDirPath: string;
-  public pexelsApiKey: string;
+  public kieApiKey: string;
+  public kieImageResolution: "1K" | "2K" | "4K" = "2K";
+  public kieOutputFormat: "png" | "jpg" = "png";
+  public kiePollIntervalMs: number = 2000;
+  public kiePollTimeoutMs: number = 120000;
   public logLevel: pino.Level;
   public whisperVerbose: boolean;
   public port: number;
@@ -74,7 +78,24 @@ export class Config {
     this.staticDirPath = path.join(this.packageDirPath, "static");
     this.musicDirPath = path.join(this.staticDirPath, "music");
 
-    this.pexelsApiKey = process.env.PEXELS_API_KEY as string;
+    this.kieApiKey = process.env.KIE_API_KEY as string;
+
+    if (process.env.KIE_IMAGE_RESOLUTION) {
+      this.kieImageResolution = process.env.KIE_IMAGE_RESOLUTION as
+        | "1K"
+        | "2K"
+        | "4K";
+    }
+    if (process.env.KIE_OUTPUT_FORMAT) {
+      this.kieOutputFormat = process.env.KIE_OUTPUT_FORMAT as "png" | "jpg";
+    }
+    if (process.env.KIE_POLL_INTERVAL_MS) {
+      this.kiePollIntervalMs = parseInt(process.env.KIE_POLL_INTERVAL_MS);
+    }
+    if (process.env.KIE_POLL_TIMEOUT_MS) {
+      this.kiePollTimeoutMs = parseInt(process.env.KIE_POLL_TIMEOUT_MS);
+    }
+
     this.logLevel = (process.env.LOG_LEVEL || defaultLogLevel) as pino.Level;
     this.whisperVerbose = process.env.WHISPER_VERBOSE === "true";
     this.port = process.env.PORT ? parseInt(process.env.PORT) : defaultPort;
@@ -101,9 +122,9 @@ export class Config {
   }
 
   public ensureConfig() {
-    if (!this.pexelsApiKey) {
+    if (!this.kieApiKey) {
       throw new Error(
-        "PEXELS_API_KEY environment variable is missing. Get your free API key: https://www.pexels.com/api/key/ - see how to run the project: https://github.com/gyoridavid/short-video-maker",
+        "KIE_API_KEY environment variable is missing. Get your API key from https://kie.ai - see how to run the project: https://github.com/gyoridavid/short-video-maker",
       );
     }
   }

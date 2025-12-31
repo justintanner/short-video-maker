@@ -3,14 +3,12 @@ import { OrientationEnum } from "./../types/shorts";
 import fs from "fs-extra";
 import cuid from "cuid";
 import path from "path";
-import https from "https";
-import http from "http";
 
 import { Kokoro } from "./libraries/Kokoro";
 import { Remotion } from "./libraries/Remotion";
 import { Whisper } from "./libraries/Whisper";
 import { FFMpeg } from "./libraries/FFmpeg";
-import { PexelsAPI } from "./libraries/Pexels";
+import { KIEAPI } from "./libraries/KIE";
 import { Config } from "../config";
 import { logger } from "../logger";
 import { MusicManager } from "./music";
@@ -36,7 +34,7 @@ export class ShortCreator {
     private kokoro: Kokoro,
     private whisper: Whisper,
     private ffmpeg: FFMpeg,
-    private pexelsApi: PexelsAPI,
+    private kieApi: KIEAPI,
     private musicManager: MusicManager,
   ) {}
 
@@ -100,7 +98,6 @@ export class ShortCreator {
     );
     const scenes: Scene[] = [];
     let totalDuration = 0;
-    const excludeVideoIds = [];
     const tempFiles = [];
 
     const orientation: OrientationEnum =
@@ -123,60 +120,40 @@ export class ShortCreator {
       const tempId = cuid();
       const tempWavFileName = `${tempId}.wav`;
       const tempMp3FileName = `${tempId}.mp3`;
-      const tempVideoFileName = `${tempId}.mp4`;
+      const tempImageFileName = `${tempId}.png`;
       const tempWavPath = path.join(this.config.tempDirPath, tempWavFileName);
       const tempMp3Path = path.join(this.config.tempDirPath, tempMp3FileName);
-      const tempVideoPath = path.join(
+      const tempImagePath = path.join(
         this.config.tempDirPath,
-        tempVideoFileName,
+        tempImageFileName,
       );
-      tempFiles.push(tempVideoPath);
+      tempFiles.push(tempImagePath);
       tempFiles.push(tempWavPath, tempMp3Path);
 
       await this.ffmpeg.saveNormalizedAudio(audioStream, tempWavPath);
       const captions = await this.whisper.CreateCaption(tempWavPath);
 
       await this.ffmpeg.saveToMp3(audioStream, tempMp3Path);
-      const video = await this.pexelsApi.findVideo(
+
+      logger.debug(
+        { searchTerms: scene.searchTerms, sceneText: scene.text, orientation },
+        "Generating image from KIE API",
+      );
+
+      const image = await this.kieApi.generateImage(
         scene.searchTerms,
-        audioLength,
-        excludeVideoIds,
+        scene.text,
         orientation,
       );
 
-      logger.debug(`Downloading video from ${video.url} to ${tempVideoPath}`);
+      logger.debug(`Image generated: ${image.id}, copying to ${tempImagePath}`);
 
-      await new Promise<void>((resolve, reject) => {
-        const fileStream = fs.createWriteStream(tempVideoPath);
-        https
-          .get(video.url, (response: http.IncomingMessage) => {
-            if (response.statusCode !== 200) {
-              reject(
-                new Error(`Failed to download video: ${response.statusCode}`),
-              );
-              return;
-            }
-
-            response.pipe(fileStream);
-
-            fileStream.on("finish", () => {
-              fileStream.close();
-              logger.debug(`Video downloaded successfully to ${tempVideoPath}`);
-              resolve();
-            });
-          })
-          .on("error", (err: Error) => {
-            fs.unlink(tempVideoPath, () => {}); // Delete the file if download failed
-            logger.error(err, "Error downloading video:");
-            reject(err);
-          });
-      });
-
-      excludeVideoIds.push(video.id);
+      // Copy the image from KIE temp location to our temp location
+      await fs.copy(image.url, tempImagePath);
 
       scenes.push({
         captions,
-        video: `http://localhost:${this.config.port}/api/tmp/${tempVideoFileName}`,
+        image: `http://localhost:${this.config.port}/api/tmp/${tempImageFileName}`,
         audio: {
           url: `http://localhost:${this.config.port}/api/tmp/${tempMp3FileName}`,
           duration: audioLength,

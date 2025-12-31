@@ -153,6 +153,12 @@ export class APIRouter {
         if (tmpFile.endsWith(".mp4")) {
           res.setHeader("Content-Type", "video/mp4");
         }
+        if (tmpFile.endsWith(".png")) {
+          res.setHeader("Content-Type", "image/png");
+        }
+        if (tmpFile.endsWith(".jpg") || tmpFile.endsWith(".jpeg")) {
+          res.setHeader("Content-Type", "image/jpeg");
+        }
 
         const tmpFileStream = fs.createReadStream(tmpFilePath);
         tmpFileStream.on("error", (error) => {

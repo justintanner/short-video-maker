@@ -4,7 +4,9 @@ import {
   useCurrentFrame,
   useVideoConfig,
   Audio,
-  OffthreadVideo,
+  Img,
+  interpolate,
+  Easing,
 } from "remotion";
 import { z } from "zod";
 import { loadFont } from "@remotion/google-fonts/BarlowCondensed";
@@ -61,7 +63,7 @@ export const LandscapeVideo: React.FC<z.infer<typeof shortVideoSchema>> = ({
       />
 
       {scenes.map((scene, i) => {
-        const { captions, audio, video } = scene;
+        const { captions, audio, image } = scene;
         const pages = createCaptionPages({
           captions,
           lineMaxLength: 30,
@@ -82,13 +84,98 @@ export const LandscapeVideo: React.FC<z.infer<typeof shortVideoSchema>> = ({
           durationInFrames += (config.paddingBack / 1000) * fps;
         }
 
+        // Ken Burns effect - deterministic randomness based on scene index
+        const kenBurnsVariant = i % 4;
+
         return (
           <Sequence
             from={startFrame}
             durationInFrames={durationInFrames}
             key={`scene-${i}`}
           >
-            <OffthreadVideo src={video} muted />
+            <AbsoluteFill
+              style={{
+                overflow: "hidden",
+              }}
+            >
+              {(() => {
+                const scaleProgress = interpolate(
+                  frame - startFrame,
+                  [0, durationInFrames],
+                  kenBurnsVariant === 2 ? [1.3, 1.0] : [1.0, 1.3], // Zoom out for variant 2
+                  {
+                    extrapolateLeft: "clamp",
+                    extrapolateRight: "clamp",
+                    easing: Easing.inOut(Easing.ease),
+                  },
+                );
+
+                let translateX = 0;
+                let translateY = 0;
+
+                if (kenBurnsVariant === 0) {
+                  // Zoom In + Pan Right
+                  translateX = interpolate(
+                    frame - startFrame,
+                    [0, durationInFrames],
+                    [0, -10],
+                    {
+                      extrapolateLeft: "clamp",
+                      extrapolateRight: "clamp",
+                      easing: Easing.inOut(Easing.ease),
+                    },
+                  );
+                } else if (kenBurnsVariant === 1) {
+                  // Zoom In + Pan Left
+                  translateX = interpolate(
+                    frame - startFrame,
+                    [0, durationInFrames],
+                    [0, 10],
+                    {
+                      extrapolateLeft: "clamp",
+                      extrapolateRight: "clamp",
+                      easing: Easing.inOut(Easing.ease),
+                    },
+                  );
+                } else if (kenBurnsVariant === 2) {
+                  // Zoom Out + Pan Down
+                  translateY = interpolate(
+                    frame - startFrame,
+                    [0, durationInFrames],
+                    [-10, 0],
+                    {
+                      extrapolateLeft: "clamp",
+                      extrapolateRight: "clamp",
+                      easing: Easing.inOut(Easing.ease),
+                    },
+                  );
+                } else {
+                  // Zoom In + Pan Up
+                  translateY = interpolate(
+                    frame - startFrame,
+                    [0, durationInFrames],
+                    [0, -10],
+                    {
+                      extrapolateLeft: "clamp",
+                      extrapolateRight: "clamp",
+                      easing: Easing.inOut(Easing.ease),
+                    },
+                  );
+                }
+
+                return (
+                  <Img
+                    src={image}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      transform: `scale(${scaleProgress}) translate(${translateX}%, ${translateY}%)`,
+                    }}
+                  />
+                );
+              })()}
+            </AbsoluteFill>
             <Audio src={audio.url} />
             {pages.map((page, j) => {
               return (

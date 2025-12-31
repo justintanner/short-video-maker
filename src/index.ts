@@ -6,10 +6,11 @@ import { Kokoro } from "./short-creator/libraries/Kokoro";
 import { Remotion } from "./short-creator/libraries/Remotion";
 import { Whisper } from "./short-creator/libraries/Whisper";
 import { FFMpeg } from "./short-creator/libraries/FFmpeg";
-import { PexelsAPI } from "./short-creator/libraries/Pexels";
+import { KIEAPI } from "./short-creator/libraries/KIE";
 import { Config } from "./config";
 import { ShortCreator } from "./short-creator/ShortCreator";
 import { logger } from "./logger";
+import { OrientationEnum } from "./types/shorts";
 import { Server } from "./server/server";
 import { MusicManager } from "./short-creator/music";
 
@@ -39,7 +40,13 @@ async function main() {
   const whisper = await Whisper.init(config);
   logger.debug("initializing ffmpeg");
   const ffmpeg = await FFMpeg.init();
-  const pexelsApi = new PexelsAPI(config.pexelsApiKey);
+  logger.debug("initializing KIE API");
+  const kieApi = new KIEAPI(
+    config.kieApiKey,
+    config.tempDirPath,
+    config.kiePollIntervalMs,
+    config.kiePollTimeoutMs,
+  );
 
   logger.debug("initializing the short creator");
   const shortCreator = new ShortCreator(
@@ -48,7 +55,7 @@ async function main() {
     kokoro,
     whisper,
     ffmpeg,
-    pexelsApi,
+    kieApi,
     musicManager,
   );
 
@@ -63,7 +70,7 @@ async function main() {
       try {
         const audioBuffer = (await kokoro.generate("hi", "af_heart")).audio;
         await ffmpeg.createMp3DataUri(audioBuffer);
-        await pexelsApi.findVideo(["dog"], 2.4);
+        await kieApi.generateImage(["test"], "installation test", OrientationEnum.portrait);
         const testVideoPath = path.join(config.tempDirPath, "test.mp4");
         await remotion.testRender(testVideoPath);
         fs.rmSync(testVideoPath, { force: true });
