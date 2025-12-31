@@ -7,6 +7,7 @@ import { Remotion } from "./short-creator/libraries/Remotion";
 import { Whisper } from "./short-creator/libraries/Whisper";
 import { FFMpeg } from "./short-creator/libraries/FFmpeg";
 import { PexelsAPI } from "./short-creator/libraries/Pexels";
+import { VeoAPI } from "./short-creator/libraries/Veo";
 import { NanoBananaPro } from "./short-creator/libraries/NanoBananaPro";
 import { Config } from "./config";
 import { ShortCreator } from "./short-creator/ShortCreator";
@@ -41,6 +42,7 @@ async function main() {
   logger.debug("initializing ffmpeg");
   const ffmpeg = await FFMpeg.init();
   const pexelsApi = new PexelsAPI(config.pexelsApiKey);
+  const veoApi = new VeoAPI(config.veoApiKey);
   const nanoBananaPro = new NanoBananaPro(config.tempDirPath);
 
   logger.debug("initializing the short creator");
@@ -51,6 +53,7 @@ async function main() {
     whisper,
     ffmpeg,
     pexelsApi,
+    veoApi,
     nanoBananaPro,
     musicManager,
   );

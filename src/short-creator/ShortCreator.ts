@@ -11,6 +11,7 @@ import { Remotion } from "./libraries/Remotion";
 import { Whisper } from "./libraries/Whisper";
 import { FFMpeg } from "./libraries/FFmpeg";
 import { PexelsAPI } from "./libraries/Pexels";
+import { VeoAPI } from "./libraries/Veo";
 import { NanoBananaPro } from "./libraries/NanoBananaPro";
 import { Config } from "../config";
 import { logger } from "../logger";
@@ -38,6 +39,7 @@ export class ShortCreator {
     private whisper: Whisper,
     private ffmpeg: FFMpeg,
     private pexelsApi: PexelsAPI,
+    private veoApi: VeoAPI,
     private nanoBananaPro: NanoBananaPro,
     private musicManager: MusicManager,
   ) {}
@@ -159,9 +161,58 @@ export class ShortCreator {
       let imageUrl: string | undefined;
 
       if (scene.imageInput && scene.imageInput.value) {
-        // Use the provided image
-        imageUrl = scene.imageInput.value;
-        logger.debug({ imageUrl }, "Using provided image for scene");
+        // Use the provided image and animate it with Veo
+        const inputImage = scene.imageInput.value;
+        logger.debug({ imageUrl: inputImage }, "Using provided image for scene, animating with Veo");
+
+        const tempVideoFileName = `${tempId}_veo.mp4`;
+        const tempVideoPath = path.join(
+            this.config.tempDirPath,
+            tempVideoFileName,
+        );
+        tempFiles.push(tempVideoPath);
+
+        const aspectRatio = orientation === OrientationEnum.landscape ? "16:9" : "9:16";
+        const prompt = scene.text || scene.searchTerms.join(", ");
+
+        try {
+          const veoUrl = await this.veoApi.generateVideo(prompt, inputImage, aspectRatio);
+          
+          logger.debug(`Downloading Veo video from ${veoUrl} to ${tempVideoPath}`);
+
+          await new Promise<void>((resolve, reject) => {
+            const fileStream = fs.createWriteStream(tempVideoPath);
+            https
+                .get(veoUrl, (response: http.IncomingMessage) => {
+                  if (response.statusCode !== 200) {
+                    reject(
+                        new Error(`Failed to download Veo video: ${response.statusCode}`),
+                    );
+                    return;
+                  }
+                  response.pipe(fileStream);
+                  fileStream.on("finish", () => {
+                    fileStream.close();
+                    logger.debug(`Veo video downloaded successfully to ${tempVideoPath}`);
+                    resolve();
+                  });
+                })
+                .on("error", (err: Error) => {
+                  fs.unlink(tempVideoPath, () => {}); 
+                  logger.error(err, "Error downloading Veo video:");
+                  reject(err);
+                });
+          });
+          
+          videoUrl = `http://localhost:${this.config.port}/api/tmp/${tempVideoFileName}`;
+        } catch (error) {
+           logger.error(error, "Failed to generate/download Veo video, falling back to static image");
+        }
+        
+        if (!videoUrl) {
+           imageUrl = inputImage;
+        }
+
       } else {
         // Fallback to Pexels video
         const tempVideoFileName = `${tempId}.mp4`;

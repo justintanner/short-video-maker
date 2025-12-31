@@ -8,8 +8,6 @@ import { logger } from "../../logger";
 import {
   renderConfig,
   sceneInput,
-  type RenderConfig,
-  type SceneInput,
 } from "../../types/shorts";
 
 export class MCPRouter {
@@ -31,15 +29,19 @@ export class MCPRouter {
   }
 
   private setupMCPServer() {
+    const getVideoStatusSchema = z.object({
+      videoId: z.string().describe("The ID of the video"),
+    });
+
     this.mcpServer.registerTool(
       "get-video-status",
       {
         description: "Get the status of a video (ready, processing, failed)",
-        inputSchema: z.object({
-          videoId: z.string().describe("The ID of the video"),
-        }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        inputSchema: getVideoStatusSchema as any,
       },
-      async (args: { videoId: string }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (args: any) => {
         const { videoId } = args;
         const status = this.shortCreator.status(videoId);
         return {
@@ -53,16 +55,20 @@ export class MCPRouter {
       },
     );
 
+    const createShortVideoSchema = z.object({
+      scenes: z.array(sceneInput),
+      config: renderConfig,
+    });
+
     this.mcpServer.registerTool(
       "create-short-video",
       {
         description: "Create a short video from a list of scenes",
-        inputSchema: z.object({
-          scenes: z.array(sceneInput),
-          config: renderConfig,
-        }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        inputSchema: createShortVideoSchema as any,
       },
-      async (args: { scenes: SceneInput[]; config: RenderConfig }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (args: any) => {
         const { scenes, config } = args;
         const videoId = await this.shortCreator.addToQueue(scenes, config);
 
