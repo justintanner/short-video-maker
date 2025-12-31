@@ -37,9 +37,9 @@ export class MCPRouter {
         description: "Get the status of a video (ready, processing, failed)",
         inputSchema: z.object({
           videoId: z.string().describe("The ID of the video"),
-        }) as any,
+        }),
       },
-      async (args: any) => {
+      async (args: { videoId: string }) => {
         const { videoId } = args;
         const status = this.shortCreator.status(videoId);
         return {
@@ -60,9 +60,9 @@ export class MCPRouter {
         inputSchema: z.object({
           scenes: z.array(sceneInput),
           config: renderConfig,
-        }) as any,
+        }),
       },
-      async (args: any) => {
+      async (args: { scenes: SceneInput[]; config: RenderConfig }) => {
         const { scenes, config } = args;
         const videoId = await this.shortCreator.addToQueue(scenes, config);
 

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+/* eslint-disable @remotion/warn-native-media-tag */
+import React, { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import {
@@ -17,9 +18,15 @@ import {
   IconButton,
   Divider,
   InputAdornment,
+  RadioGroup,
+  Radio,
+  FormControlLabel,
+  FormLabel,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
+import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
+import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import {
   SceneInput,
   RenderConfig,
@@ -32,13 +39,24 @@ import {
 
 interface SceneFormData {
   text: string;
-  searchTerms: string; // Changed to string
+  searchTerms: string;
+  imageType: "stock" | "generate" | "upload";
+  imagePrompt: string;
+  uploadedImage: string | null;
+  generatedImage: string | null;
 }
 
 const VideoCreator: React.FC = () => {
   const navigate = useNavigate();
   const [scenes, setScenes] = useState<SceneFormData[]>([
-    { text: "", searchTerms: "" },
+    {
+      text: "",
+      searchTerms: "",
+      imageType: "stock",
+      imagePrompt: "",
+      uploadedImage: null,
+      generatedImage: null,
+    },
   ]);
   const [config, setConfig] = useState<RenderConfig>({
     paddingBack: 1500,
@@ -52,35 +70,21 @@ const VideoCreator: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [voices, setVoices] = useState<VoiceEnum[]>([]);
-  const [musicTags, setMusicTags] = useState<MusicMoodEnum[]>([]);
-  const [loadingOptions, setLoadingOptions] = useState(true);
-
-  useEffect(() => {
-    const fetchOptions = async () => {
-      try {
-        const [voicesResponse, musicResponse] = await Promise.all([
-          axios.get("/api/voices"),
-          axios.get("/api/music-tags"),
-        ]);
-
-        setVoices(voicesResponse.data);
-        setMusicTags(musicResponse.data);
-      } catch (err) {
-        console.error("Failed to fetch options:", err);
-        setError(
-          "Failed to load voices and music options. Please refresh the page.",
-        );
-      } finally {
-        setLoadingOptions(false);
-      }
-    };
-
-    fetchOptions();
-  }, []);
+  const [generatingImage, setGeneratingImage] = useState<number | null>(null);
+  const [uploadingImage, setUploadingImage] = useState<number | null>(null);
 
   const handleAddScene = () => {
-    setScenes([...scenes, { text: "", searchTerms: "" }]);
+    setScenes([
+      ...scenes,
+      {
+        text: "",
+        searchTerms: "",
+        imageType: "stock",
+        imagePrompt: "",
+        uploadedImage: null,
+        generatedImage: null,
+      },
+    ]);
   };
 
   const handleRemoveScene = (index: number) => {
@@ -94,14 +98,63 @@ const VideoCreator: React.FC = () => {
   const handleSceneChange = (
     index: number,
     field: keyof SceneFormData,
-    value: string,
+    value: string | null,
   ) => {
     const newScenes = [...scenes];
+    // @ts-expect-error - value type is strictly checked but field varies
     newScenes[index] = { ...newScenes[index], [field]: value };
     setScenes(newScenes);
   };
 
-  const handleConfigChange = (field: keyof RenderConfig, value: any) => {
+  const handleGenerateImage = async (index: number) => {
+    const scene = scenes[index];
+    if (!scene.imagePrompt) return;
+
+    setGeneratingImage(index);
+    try {
+      const response = await axios.post("/api/generate-image", {
+        prompt: scene.imagePrompt,
+      });
+      handleSceneChange(index, "generatedImage", response.data.url);
+    } catch (err) {
+      console.error("Failed to generate image:", err);
+      // You might want to show a snackbar here
+      alert("Failed to generate image");
+    } finally {
+      setGeneratingImage(null);
+    }
+  };
+
+  const handleUploadImage = async (
+    index: number,
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImage(index);
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      try {
+        const base64String = reader.result as string;
+        const response = await axios.post("/api/upload-image", {
+          image: base64String,
+        });
+        handleSceneChange(index, "uploadedImage", response.data.url);
+      } catch (err) {
+        console.error("Failed to upload image:", err);
+        alert("Failed to upload image");
+      } finally {
+        setUploadingImage(null);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleConfigChange = (
+    field: keyof RenderConfig,
+    value: string | number,
+  ) => {
     setConfig({ ...config, [field]: value });
   };
 
@@ -112,13 +165,32 @@ const VideoCreator: React.FC = () => {
 
     try {
       // Convert scenes to the expected API format
-      const apiScenes: SceneInput[] = scenes.map((scene) => ({
-        text: scene.text,
-        searchTerms: scene.searchTerms
-          .split(",")
-          .map((term) => term.trim())
-          .filter((term) => term.length > 0),
-      }));
+      const apiScenes: SceneInput[] = scenes.map((scene) => {
+        const baseInput: Partial<SceneInput> & {
+          text: string;
+          searchTerms: string[];
+        } = {
+          text: scene.text,
+          searchTerms: scene.searchTerms
+            .split(",")
+            .map((term) => term.trim())
+            .filter((term) => term.length > 0),
+        };
+
+        if (scene.imageType === "generate" && scene.generatedImage) {
+          baseInput.imageInput = {
+            type: "generate",
+            value: scene.generatedImage,
+          };
+        } else if (scene.imageType === "upload" && scene.uploadedImage) {
+          baseInput.imageInput = {
+            type: "upload",
+            value: scene.uploadedImage,
+          };
+        }
+
+        return baseInput as SceneInput;
+      });
 
       const response = await axios.post("/api/short-video", {
         scenes: apiScenes,
@@ -133,19 +205,6 @@ const VideoCreator: React.FC = () => {
       setLoading(false);
     }
   };
-
-  if (loadingOptions) {
-    return (
-      <Box
-        display="flex"
-        justifyContent="center"
-        alignItems="center"
-        height="80vh"
-      >
-        <CircularProgress />
-      </Box>
-    );
-  }
 
   return (
     <Box maxWidth="md" mx="auto" py={4}>
@@ -200,17 +259,127 @@ const VideoCreator: React.FC = () => {
               </Grid>
 
               <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Search Terms (comma-separated)"
-                  value={scene.searchTerms}
-                  onChange={(e) =>
-                    handleSceneChange(index, "searchTerms", e.target.value)
-                  }
-                  helperText="Enter keywords for background video, separated by commas"
-                  required
-                />
+                <FormControl component="fieldset">
+                  <FormLabel component="legend">Visual Source</FormLabel>
+                  <RadioGroup
+                    row
+                    value={scene.imageType}
+                    onChange={(e) =>
+                      handleSceneChange(index, "imageType", e.target.value)
+                    }
+                  >
+                    <FormControlLabel
+                      value="stock"
+                      control={<Radio />}
+                      label="Stock Video (Pexels)"
+                    />
+                    <FormControlLabel
+                      value="generate"
+                      control={<Radio />}
+                      label="Generate Image (Nano Banana Pro)"
+                    />
+                    <FormControlLabel
+                      value="upload"
+                      control={<Radio />}
+                      label="Upload Image"
+                    />
+                  </RadioGroup>
+                </FormControl>
               </Grid>
+
+              {scene.imageType === "stock" && (
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Search Terms (comma-separated)"
+                    value={scene.searchTerms}
+                    onChange={(e) =>
+                      handleSceneChange(index, "searchTerms", e.target.value)
+                    }
+                    helperText="Enter keywords for background video, separated by commas"
+                    required
+                  />
+                </Grid>
+              )}
+
+              {scene.imageType === "generate" && (
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Image Description"
+                    value={scene.imagePrompt}
+                    onChange={(e) =>
+                      handleSceneChange(index, "imagePrompt", e.target.value)
+                    }
+                    helperText="Describe the image you want to generate"
+                  />
+                  <Box mt={2} display="flex" alignItems="center" gap={2}>
+                    <Button
+                      variant="contained"
+                      onClick={() => handleGenerateImage(index)}
+                      disabled={!scene.imagePrompt || generatingImage === index}
+                      startIcon={<AutoFixHighIcon />}
+                    >
+                      {generatingImage === index
+                        ? "Generating..."
+                        : "Generate Preview"}
+                    </Button>
+                  </Box>
+                  {scene.generatedImage && (
+                    <Box mt={2}>
+                      <Typography variant="subtitle2" gutterBottom>
+                        Preview:
+                      </Typography>
+                      <img
+                        src={scene.generatedImage}
+                        alt="Generated preview"
+                        style={{
+                          maxWidth: "100%",
+                          maxHeight: "300px",
+                          borderRadius: "4px",
+                        }}
+                      />
+                    </Box>
+                  )}
+                </Grid>
+              )}
+
+              {scene.imageType === "upload" && (
+                <Grid item xs={12}>
+                  <Button
+                    component="label"
+                    variant="outlined"
+                    startIcon={<CloudUploadIcon />}
+                    disabled={uploadingImage === index}
+                  >
+                    {uploadingImage === index
+                      ? "Uploading..."
+                      : "Upload Image"}
+                    <input
+                      type="file"
+                      hidden
+                      accept="image/*"
+                      onChange={(e) => handleUploadImage(index, e)}
+                    />
+                  </Button>
+                  {scene.uploadedImage && (
+                    <Box mt={2}>
+                      <Typography variant="subtitle2" gutterBottom>
+                        Preview:
+                      </Typography>
+                      <img
+                        src={scene.uploadedImage}
+                        alt="Uploaded preview"
+                        style={{
+                          maxWidth: "100%",
+                          maxHeight: "300px",
+                          borderRadius: "4px",
+                        }}
+                      />
+                    </Box>
+                  )}
+                </Grid>
+              )}
             </Grid>
           </Paper>
         ))}

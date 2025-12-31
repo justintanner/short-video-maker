@@ -9,6 +9,7 @@ import { Remotion } from "./libraries/Remotion";
 import { Whisper } from "./libraries/Whisper";
 import { FFMpeg } from "./libraries/FFmpeg";
 import { PexelsAPI } from "./libraries/Pexels";
+import { NanoBananaPro } from "./libraries/NanoBananaPro";
 import { Config } from "../config";
 import { MusicManager } from "./music";
 
@@ -34,7 +35,9 @@ vi.mock("fs-extra", async () => {
     ensureDirSync: vi.fn((path) => {
       try {
         memfs.mkdirSync(path, { recursive: true });
-      } catch (error) {}
+      } catch {
+        // ignore
+      }
     }),
     removeSync: vi.fn((path) => {
       try {
@@ -45,7 +48,9 @@ vi.mock("fs-extra", async () => {
         } else {
           memfs.unlinkSync(path);
         }
-      } catch (error) {}
+      } catch {
+        // ignore
+      }
     }),
     createWriteStream: vi.fn(() => ({
       on: vi.fn(),
@@ -178,6 +183,7 @@ test("test me", async () => {
   ]);
 
   const musicManager = new MusicManager(config);
+  const nanoBananaPro = new NanoBananaPro(config.tempDirPath);
 
   const shortCreator = new ShortCreator(
     config,
@@ -186,6 +192,7 @@ test("test me", async () => {
     whisper,
     ffmpeg,
     pexelsAPI,
+    nanoBananaPro,
     musicManager,
   );
 

@@ -27,7 +27,7 @@ test("should time out", async () => {
     .delay(1000)
     .times(30)
     .reply(200, {});
-  expect(async () => {
+  await expect(async () => {
     const pexels = new PexelsAPI("asdf");
     await pexels.findVideo(["dog"], 2.4, [], OrientationEnum.portrait, 100);
   }).rejects.toThrow(
@@ -38,9 +38,10 @@ test("should time out", async () => {
 });
 
 test("should retry 3 times", async () => {
+  nock.cleanAll();
   nock("https://api.pexels.com")
     .get(/videos\/search/)
-    .delay(1000)
+    .delay(200)
     .times(2)
     .reply(200, {});
   const mockResponse = fs.readFileSync(
@@ -52,7 +53,8 @@ test("should retry 3 times", async () => {
     .reply(200, mockResponse);
 
   const pexels = new PexelsAPI("asdf");
-  const video = await pexels.findVideo(["dog"], 2.4, []);
+  // Use 100ms timeout, nock delays 200ms -> triggers timeout
+  const video = await pexels.findVideo(["dog"], 2.4, [], OrientationEnum.portrait, 100);
   console.log(video);
   assert.isObject(video, "Video should be an object");
-});
+}, 15000);

@@ -1,3 +1,4 @@
+/* eslint-disable @remotion/warn-native-media-tag */
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -23,44 +24,44 @@ const VideoDetails: React.FC = () => {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isMounted = useRef(true);
 
-  const checkVideoStatus = async () => {
-    try {
-      const response = await axios.get(`/api/short-video/${videoId}/status`);
-      const videoStatus = response.data.status;
+  useEffect(() => {
+    const checkVideoStatus = async () => {
+      try {
+        const response = await axios.get(`/api/short-video/${videoId}/status`);
+        const videoStatus = response.data.status;
 
-      if (isMounted.current) {
-        setStatus(videoStatus || 'unknown');
-        console.log("videoStatus", videoStatus);
-        
-        if (videoStatus !== 'processing') {
-          console.log("video is not processing");
-          console.log("interval", intervalRef.current);
+        if (isMounted.current) {
+          setStatus(videoStatus || 'unknown');
+          console.log("videoStatus", videoStatus);
+          
+          if (videoStatus !== 'processing') {
+            console.log("video is not processing");
+            console.log("interval", intervalRef.current);
+            
+            if (intervalRef.current) {
+              console.log("clearing interval");
+              clearInterval(intervalRef.current);
+              intervalRef.current = null;
+            }
+          }
+          
+          setLoading(false);
+        }
+      } catch (error) {
+        if (isMounted.current) {
+          setError('Failed to fetch video status');
+          setStatus('failed');
+          setLoading(false);
+          console.error('Error fetching video status:', error);
           
           if (intervalRef.current) {
-            console.log("clearing interval");
             clearInterval(intervalRef.current);
             intervalRef.current = null;
           }
         }
-        
-        setLoading(false);
       }
-    } catch (error) {
-      if (isMounted.current) {
-        setError('Failed to fetch video status');
-        setStatus('failed');
-        setLoading(false);
-        console.error('Error fetching video status:', error);
-        
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-      }
-    }
-  };
+    };
 
-  useEffect(() => {
     checkVideoStatus();
     
     intervalRef.current = setInterval(() => {

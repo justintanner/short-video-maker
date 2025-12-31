@@ -5,6 +5,7 @@ import {
   useVideoConfig,
   Audio,
   OffthreadVideo,
+  Img,
 } from "remotion";
 import { z } from "zod";
 import { loadFont } from "@remotion/google-fonts/BarlowCondensed";
@@ -61,7 +62,7 @@ export const PortraitVideo: React.FC<z.infer<typeof shortVideoSchema>> = ({
       />
 
       {scenes.map((scene, i) => {
-        const { captions, audio, video } = scene;
+        const { captions, audio, video, image } = scene;
         const pages = createCaptionPages({
           captions,
           lineMaxLength: 20,
@@ -88,7 +89,16 @@ export const PortraitVideo: React.FC<z.infer<typeof shortVideoSchema>> = ({
             durationInFrames={durationInFrames}
             key={`scene-${i}`}
           >
-            <OffthreadVideo src={video} muted />
+            {image ? (
+              <AbsoluteFill>
+                <Img
+                  src={image}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              </AbsoluteFill>
+            ) : video ? (
+              <OffthreadVideo src={video} muted />
+            ) : null}
             <Audio src={audio.url} />
             {pages.map((page, j) => {
               return (

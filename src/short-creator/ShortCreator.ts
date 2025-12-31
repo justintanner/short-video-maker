@@ -11,6 +11,7 @@ import { Remotion } from "./libraries/Remotion";
 import { Whisper } from "./libraries/Whisper";
 import { FFMpeg } from "./libraries/FFmpeg";
 import { PexelsAPI } from "./libraries/Pexels";
+import { NanoBananaPro } from "./libraries/NanoBananaPro";
 import { Config } from "../config";
 import { logger } from "../logger";
 import { MusicManager } from "./music";
@@ -37,6 +38,7 @@ export class ShortCreator {
     private whisper: Whisper,
     private ffmpeg: FFMpeg,
     private pexelsApi: PexelsAPI,
+    private nanoBananaPro: NanoBananaPro,
     private musicManager: MusicManager,
   ) {}
 
@@ -49,6 +51,27 @@ export class ShortCreator {
       return "ready";
     }
     return "failed";
+  }
+
+  public async generateImage(prompt: string): Promise<string> {
+    const fileName = await this.nanoBananaPro.generateImage(prompt);
+    return `http://localhost:${this.config.port}/api/tmp/${fileName}`;
+  }
+
+  public async saveUploadedImage(base64Data: string): Promise<string> {
+    const matches = base64Data.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      throw new Error("Invalid base64 string");
+    }
+
+    const type = matches[1];
+    const data = Buffer.from(matches[2], "base64");
+    const extension = type.split("/")[1] || "png";
+    const fileName = `${cuid()}.${extension}`;
+    const filePath = path.join(this.config.tempDirPath, fileName);
+
+    await fs.writeFile(filePath, data);
+    return `http://localhost:${this.config.port}/api/tmp/${fileName}`;
   }
 
   public addToQueue(sceneInput: SceneInput[], config: RenderConfig): string {
@@ -123,60 +146,74 @@ export class ShortCreator {
       const tempId = cuid();
       const tempWavFileName = `${tempId}.wav`;
       const tempMp3FileName = `${tempId}.mp3`;
-      const tempVideoFileName = `${tempId}.mp4`;
       const tempWavPath = path.join(this.config.tempDirPath, tempWavFileName);
       const tempMp3Path = path.join(this.config.tempDirPath, tempMp3FileName);
-      const tempVideoPath = path.join(
-        this.config.tempDirPath,
-        tempVideoFileName,
-      );
-      tempFiles.push(tempVideoPath);
       tempFiles.push(tempWavPath, tempMp3Path);
 
       await this.ffmpeg.saveNormalizedAudio(audioStream, tempWavPath);
       const captions = await this.whisper.CreateCaption(tempWavPath);
 
       await this.ffmpeg.saveToMp3(audioStream, tempMp3Path);
-      const video = await this.pexelsApi.findVideo(
-        scene.searchTerms,
-        audioLength,
-        excludeVideoIds,
-        orientation,
-      );
 
-      logger.debug(`Downloading video from ${video.url} to ${tempVideoPath}`);
+      let videoUrl: string | undefined;
+      let imageUrl: string | undefined;
 
-      await new Promise<void>((resolve, reject) => {
-        const fileStream = fs.createWriteStream(tempVideoPath);
-        https
-          .get(video.url, (response: http.IncomingMessage) => {
-            if (response.statusCode !== 200) {
-              reject(
-                new Error(`Failed to download video: ${response.statusCode}`),
-              );
-              return;
-            }
+      if (scene.imageInput && scene.imageInput.value) {
+        // Use the provided image
+        imageUrl = scene.imageInput.value;
+        logger.debug({ imageUrl }, "Using provided image for scene");
+      } else {
+        // Fallback to Pexels video
+        const tempVideoFileName = `${tempId}.mp4`;
+        const tempVideoPath = path.join(
+            this.config.tempDirPath,
+            tempVideoFileName,
+        );
+        tempFiles.push(tempVideoPath);
 
-            response.pipe(fileStream);
+        const video = await this.pexelsApi.findVideo(
+            scene.searchTerms,
+            audioLength,
+            excludeVideoIds,
+            orientation,
+        );
 
-            fileStream.on("finish", () => {
-              fileStream.close();
-              logger.debug(`Video downloaded successfully to ${tempVideoPath}`);
-              resolve();
-            });
-          })
-          .on("error", (err: Error) => {
-            fs.unlink(tempVideoPath, () => {}); // Delete the file if download failed
-            logger.error(err, "Error downloading video:");
-            reject(err);
-          });
-      });
+        logger.debug(`Downloading video from ${video.url} to ${tempVideoPath}`);
 
-      excludeVideoIds.push(video.id);
+        await new Promise<void>((resolve, reject) => {
+          const fileStream = fs.createWriteStream(tempVideoPath);
+          https
+              .get(video.url, (response: http.IncomingMessage) => {
+                if (response.statusCode !== 200) {
+                  reject(
+                      new Error(`Failed to download video: ${response.statusCode}`),
+                  );
+                  return;
+                }
+
+                response.pipe(fileStream);
+
+                fileStream.on("finish", () => {
+                  fileStream.close();
+                  logger.debug(`Video downloaded successfully to ${tempVideoPath}`);
+                  resolve();
+                });
+              })
+              .on("error", (err: Error) => {
+                fs.unlink(tempVideoPath, () => {}); // Delete the file if download failed
+                logger.error(err, "Error downloading video:");
+                reject(err);
+              });
+        });
+
+        excludeVideoIds.push(video.id);
+        videoUrl = `http://localhost:${this.config.port}/api/tmp/${tempVideoFileName}`;
+      }
 
       scenes.push({
         captions,
-        video: `http://localhost:${this.config.port}/api/tmp/${tempVideoFileName}`,
+        video: videoUrl,
+        image: imageUrl,
         audio: {
           url: `http://localhost:${this.config.port}/api/tmp/${tempMp3FileName}`,
           duration: audioLength,

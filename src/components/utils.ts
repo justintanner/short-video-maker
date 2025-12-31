@@ -16,7 +16,8 @@ export const shortVideoSchema = z.object({
         url: z.string(),
         duration: z.number(),
       }),
-      video: z.string(),
+      video: z.string().optional(),
+      image: z.string().optional(),
     }),
   ),
   config: z.object({
