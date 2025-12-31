@@ -123,6 +123,12 @@ export class ShortCreator {
       },
       "Creating short video",
     );
+
+    // Veo-only pipeline bypass - skip TTS/Whisper/Remotion
+    if (config.veoOnly) {
+      return this.createVeoOnlyShort(videoId, inputScenes, config);
+    }
+
     const scenes: Scene[] = [];
     let totalDuration = 0;
     const excludeVideoIds = [];
@@ -173,10 +179,15 @@ export class ShortCreator {
         tempFiles.push(tempVideoPath);
 
         const aspectRatio = orientation === OrientationEnum.landscape ? "16:9" : "9:16";
-        const prompt = scene.text || scene.searchTerms.join(", ");
+        const prompt = scene.veoPrompt || scene.text || scene.searchTerms.join(", ");
 
         try {
-          const veoUrl = await this.veoApi.generateVideo(prompt, inputImage, aspectRatio);
+          const veoUrl = await this.veoApi.generateVideo(
+            prompt,
+            inputImage,   // Start frame
+            inputImage,   // End frame (same image)
+            aspectRatio
+          );
           
           logger.debug(`Downloading Veo video from ${veoUrl} to ${tempVideoPath}`);
 
@@ -303,6 +314,124 @@ export class ShortCreator {
       fs.removeSync(file);
     }
 
+    return videoId;
+  }
+
+  /**
+   * Create a video using only Veo - skip TTS, Whisper, and Remotion entirely
+   */
+  private async createVeoOnlyShort(
+    videoId: string,
+    inputScenes: SceneInput[],
+    config: RenderConfig,
+  ): Promise<string> {
+    logger.debug(
+      { videoId, inputScenes, config },
+      "Creating Veo-only video (no TTS/Whisper/Remotion)",
+    );
+
+    // Only process first scene for veo-only mode
+    const scene = inputScenes[0];
+
+    if (!scene.imageInput || !scene.imageInput.value) {
+      throw new Error("Veo-only mode requires an imageInput");
+    }
+
+    let inputImage = scene.imageInput.value;
+    const orientation: OrientationEnum =
+      config.orientation || OrientationEnum.portrait;
+    const aspectRatio =
+      orientation === OrientationEnum.landscape ? "16:9" : "9:16";
+    const prompt =
+      scene.veoPrompt || scene.text || scene.searchTerms.join(", ");
+
+    // If the image is a localhost URL (static file), upload it to Veo first
+    if (inputImage.includes("localhost") || inputImage.includes("127.0.0.1")) {
+      logger.debug(
+        { originalUrl: inputImage },
+        "Detected localhost URL, uploading to Veo",
+      );
+
+      // Convert localhost URL to file path
+      // e.g., http://localhost:3123/static/1080p-blank.png -> /path/to/static/1080p-blank.png
+      const urlPath = new URL(inputImage).pathname;
+      const fileName = path.basename(urlPath);
+
+      let filePath: string;
+      if (urlPath.startsWith("/static/")) {
+        // Static files are served from the static directory
+        filePath = path.join(process.cwd(), "static", fileName);
+      } else if (urlPath.startsWith("/api/tmp/")) {
+        // Temp files are served from the temp directory
+        filePath = path.join(this.config.tempDirPath, fileName);
+      } else {
+        throw new Error(`Unsupported URL path: ${urlPath}`);
+      }
+
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`File not found: ${filePath}`);
+      }
+
+      // Upload to Veo and get public URL
+      inputImage = await this.veoApi.uploadFile(filePath);
+      logger.debug({ publicUrl: inputImage }, "Image uploaded to Veo");
+    }
+
+    logger.debug({ prompt, inputImage, aspectRatio }, "Generating Veo video");
+
+    // Generate video with Veo (start and end frames are the same image URL)
+    const veoUrl = await this.veoApi.generateVideo(
+      prompt,
+      inputImage, // Start frame
+      inputImage, // End frame (same image)
+      aspectRatio,
+    );
+
+    // Download the video directly to final location (not temp)
+    const videoPath = this.getVideoPath(videoId);
+
+    logger.debug(
+      { veoUrl, videoPath },
+      "Downloading Veo video to final location",
+    );
+
+    await new Promise<void>((resolve, reject) => {
+      const fileStream = fs.createWriteStream(videoPath);
+      const request = https.get(veoUrl, (response: http.IncomingMessage) => {
+        if (response.statusCode !== 200) {
+          reject(
+            new Error(`Failed to download Veo video: ${response.statusCode}`),
+          );
+          return;
+        }
+
+        response.pipe(fileStream);
+
+        fileStream.on("finish", () => {
+          fileStream.close();
+          logger.debug({ videoPath }, "Veo video downloaded successfully");
+          resolve();
+        });
+      });
+
+      // Add timeout for download (60 seconds)
+      request.setTimeout(60000, () => {
+        request.destroy();
+        fs.unlink(videoPath, () => {});
+        reject(new Error("Veo video download timed out after 60 seconds"));
+      });
+
+      request.on("error", (err: Error) => {
+        fs.unlink(videoPath, () => {});
+        logger.error(err, "Error downloading Veo video");
+        reject(err);
+      });
+    });
+
+    logger.debug(
+      { videoId, videoPath },
+      "Veo-only video created successfully",
+    );
     return videoId;
   }
 

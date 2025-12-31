@@ -1,4 +1,6 @@
 import axios from "axios";
+import FormData from "form-data";
+import fs from "fs";
 import { logger } from "../../logger";
 
 interface VeoGenerateRequest {
@@ -36,29 +38,77 @@ interface VeoTaskStatusResponse {
 }
 
 const POLLING_INTERVAL_MS = 5000;
-const MAX_POLLING_ATTEMPTS = 120; // 10 minutes
+const MAX_POLLING_ATTEMPTS = 40; // 3-4 minutes (reduced from 10)
+const REQUEST_TIMEOUT_MS = 30000; // 30 second timeout for API requests
+
+interface VeoUploadResponse {
+  code: number;
+  msg: string;
+  data: {
+    downloadUrl: string;
+    fileName: string;
+    fileSize: number;
+    filePath: string;
+    mimeType: string;
+  };
+}
 
 export class VeoAPI {
   constructor(private apiKey: string) {}
 
+  /**
+   * Upload a file to Veo's file storage and get a public URL
+   */
+  public async uploadFile(filePath: string): Promise<string> {
+    logger.debug({ filePath }, "Uploading file to Veo");
+
+    const form = new FormData();
+    form.append("file", fs.createReadStream(filePath));
+    form.append("uploadPath", "veo-images"); // Required parameter
+
+    const response = await axios.post<VeoUploadResponse>(
+      "https://kieai.redpandaai.co/api/file-stream-upload",
+      form,
+      {
+        headers: {
+          ...form.getHeaders(),
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        timeout: REQUEST_TIMEOUT_MS,
+      },
+    );
+
+    logger.debug({ response: response.data }, "Veo upload response received");
+
+    if (response.data.code !== 200) {
+      throw new Error(`Veo upload failed: ${response.data.msg}`);
+    }
+
+    if (!response.data.data || !response.data.data.downloadUrl) {
+      throw new Error(
+        `Veo upload succeeded but no URL returned: ${JSON.stringify(response.data)}`,
+      );
+    }
+
+    const uploadedUrl = response.data.data.downloadUrl;
+    logger.debug({ url: uploadedUrl }, "File uploaded successfully to Veo");
+    return uploadedUrl;
+  }
+
   public async generateVideo(
     prompt: string,
-    imageUrl?: string,
+    startFrameUrl: string,
+    endFrameUrl: string,
     aspectRatio: "16:9" | "9:16" | "Auto" = "Auto",
   ): Promise<string> {
     const payload: VeoGenerateRequest = {
       prompt,
-      model: "veo3_fast", // Default to fast
+      model: "veo3", // Default to veo3
       aspectRatio,
       enableTranslation: true,
+      imageUrls: [startFrameUrl, endFrameUrl],
+      generationType: "FIRST_AND_LAST_FRAMES_2_VIDEO",
     };
-
-    if (imageUrl) {
-      payload.imageUrls = [imageUrl];
-      payload.generationType = "FIRST_AND_LAST_FRAMES_2_VIDEO";
-    } else {
-      payload.generationType = "TEXT_2_VIDEO";
-    }
 
     logger.debug({ payload }, "Starting Veo video generation");
 
@@ -70,6 +120,7 @@ export class VeoAPI {
           Authorization: `Bearer ${this.apiKey}`,
           "Content-Type": "application/json",
         },
+        timeout: REQUEST_TIMEOUT_MS,
       },
     );
 
@@ -95,6 +146,7 @@ export class VeoAPI {
             headers: {
               Authorization: `Bearer ${this.apiKey}`,
             },
+            timeout: REQUEST_TIMEOUT_MS,
           },
         );
 
@@ -129,14 +181,29 @@ export class VeoAPI {
         ) {
           throw error;
         }
-        // Otherwise continue polling (maybe transient network error)
+
+        // Check for auth/client errors that shouldn't retry
         if (axios.isAxiosError(error) && error.response) {
+          const status = error.response.status;
+
+          // Don't retry on auth or rate limit errors
+          if (status === 401 || status === 403) {
+            throw new Error(
+              `Veo authentication failed (check API key): ${JSON.stringify(error.response.data)}`,
+            );
+          }
+          if (status === 429) {
+            throw new Error(`Veo rate limit exceeded`);
+          }
+
+          // Log other HTTP errors and continue polling
           logger.error(
-            { status: error.response.status, data: error.response.data },
-            "Veo polling error",
+            { status, data: error.response.data, attempt: i + 1 },
+            "Veo polling error (will retry)",
           );
         } else {
-            logger.error(error, "Veo polling error");
+          // Log network errors and continue polling
+          logger.error({ attempt: i + 1 }, "Veo network error (will retry)");
         }
       }
     }

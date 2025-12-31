@@ -44,6 +44,10 @@ export const sceneInput = z.object({
       value: z.string(), // URL for upload/generate result
     })
     .optional(),
+  veoPrompt: z
+    .string()
+    .optional()
+    .describe("Optional prompt for Veo animation when using imageInput. Describes camera motion, atmosphere, and visual style."),
 });
 export type SceneInput = z.infer<typeof sceneInput>;
 
@@ -123,6 +127,11 @@ export const renderConfig = z.object({
     .nativeEnum(MusicVolumeEnum)
     .optional()
     .describe("Volume of the music, default is high"),
+  veoOnly: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("When true, skip TTS/Whisper/Remotion and return raw Veo video"),
 });
 export type RenderConfig = z.infer<typeof renderConfig>;
 

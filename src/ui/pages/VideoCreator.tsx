@@ -36,28 +36,34 @@ import {
   OrientationEnum,
   MusicVolumeEnum,
 } from "../../types/shorts";
+import { getRandomVeoScript } from "../data/defaultScripts";
 
 interface SceneFormData {
   text: string;
   searchTerms: string;
-  imageType: "stock" | "generate" | "upload";
+  imageType: "stock" | "generate" | "upload" | "veo-blank";
   imagePrompt: string;
+  veoPrompt: string;
   uploadedImage: string | null;
   generatedImage: string | null;
 }
 
 const VideoCreator: React.FC = () => {
   const navigate = useNavigate();
-  const [scenes, setScenes] = useState<SceneFormData[]>([
-    {
-      text: "",
-      searchTerms: "",
-      imageType: "stock",
-      imagePrompt: "",
-      uploadedImage: null,
-      generatedImage: null,
-    },
-  ]);
+  const [scenes, setScenes] = useState<SceneFormData[]>(() => {
+    const randomScript = getRandomVeoScript();
+    return [
+      {
+        text: randomScript.narration,
+        searchTerms: "",
+        imageType: "veo-blank",
+        imagePrompt: "",
+        veoPrompt: randomScript.veoPrompt,
+        uploadedImage: null,
+        generatedImage: null,
+      },
+    ];
+  });
   const [config, setConfig] = useState<RenderConfig>({
     paddingBack: 1500,
     music: MusicMoodEnum.chill,
@@ -74,13 +80,15 @@ const VideoCreator: React.FC = () => {
   const [uploadingImage, setUploadingImage] = useState<number | null>(null);
 
   const handleAddScene = () => {
+    const randomScript = getRandomVeoScript();
     setScenes([
       ...scenes,
       {
-        text: "",
+        text: randomScript.narration,
         searchTerms: "",
-        imageType: "stock",
+        imageType: "veo-blank",
         imagePrompt: "",
+        veoPrompt: randomScript.veoPrompt,
         uploadedImage: null,
         generatedImage: null,
       },
@@ -177,7 +185,18 @@ const VideoCreator: React.FC = () => {
             .filter((term) => term.length > 0),
         };
 
-        if (scene.imageType === "generate" && scene.generatedImage) {
+        if (scene.imageType === "veo-blank") {
+          // Use the blank PNG from static directory
+          const port = window.location.port || "3123";
+          const protocol = window.location.protocol;
+          const hostname = window.location.hostname;
+
+          baseInput.imageInput = {
+            type: "upload",
+            value: `${protocol}//${hostname}:${port}/static/1080p-blank.png`,
+          };
+          baseInput.veoPrompt = scene.veoPrompt;
+        } else if (scene.imageType === "generate" && scene.generatedImage) {
           baseInput.imageInput = {
             type: "generate",
             value: scene.generatedImage,
@@ -194,7 +213,10 @@ const VideoCreator: React.FC = () => {
 
       const response = await axios.post("/api/short-video", {
         scenes: apiScenes,
-        config,
+        config: {
+          ...config,
+          veoOnly: scenes[0].imageType === "veo-blank",
+        },
       });
 
       navigate(`/video/${response.data.videoId}`);
@@ -269,6 +291,11 @@ const VideoCreator: React.FC = () => {
                     }
                   >
                     <FormControlLabel
+                      value="veo-blank"
+                      control={<Radio />}
+                      label="Veo Animation (Blank Canvas)"
+                    />
+                    <FormControlLabel
                       value="stock"
                       control={<Radio />}
                       label="Stock Video (Pexels)"
@@ -286,6 +313,28 @@ const VideoCreator: React.FC = () => {
                   </RadioGroup>
                 </FormControl>
               </Grid>
+
+              {scene.imageType === "veo-blank" && (
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Animation Prompt"
+                    value={scene.veoPrompt}
+                    onChange={(e) =>
+                      handleSceneChange(index, "veoPrompt", e.target.value)
+                    }
+                    helperText="Describe camera motion, lighting, colors, and atmosphere (e.g., 'slow zoom, ethereal golden lighting, cinematic smooth motion')"
+                    multiline
+                    rows={3}
+                    required
+                  />
+                  <Box mt={2} display="flex" alignItems="center" gap={1}>
+                    <Typography variant="caption" color="primary">
+                      Using Veo 3.1 with blank canvas for pure motion graphics
+                    </Typography>
+                  </Box>
+                </Grid>
+              )}
 
               {scene.imageType === "stock" && (
                 <Grid item xs={12}>
