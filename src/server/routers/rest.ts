@@ -22,7 +22,7 @@ export class APIRouter {
     this.router = express.Router();
     this.shortCreator = shortCreator;
 
-    this.router.use(express.json());
+    this.router.use(express.json({ limit: "50mb" }));
 
     this.setupRoutes();
   }
@@ -67,6 +67,42 @@ export class APIRouter {
             error: "Invalid input",
             message: error instanceof Error ? error.message : "Unknown error",
           });
+        }
+      },
+    );
+
+    this.router.post(
+      "/generate-image",
+      async (req: ExpressRequest, res: ExpressResponse) => {
+        try {
+          const { prompt } = req.body;
+          if (!prompt || typeof prompt !== "string") {
+            res.status(400).json({ error: "Prompt is required" });
+            return;
+          }
+          const url = await this.shortCreator.generateImage(prompt);
+          res.json({ url });
+        } catch (error: unknown) {
+          logger.error(error, "Error generating image");
+          res.status(500).json({ error: "Failed to generate image" });
+        }
+      },
+    );
+
+    this.router.post(
+      "/upload-image",
+      async (req: ExpressRequest, res: ExpressResponse) => {
+        try {
+          const { image } = req.body;
+          if (!image || typeof image !== "string") {
+            res.status(400).json({ error: "Image data is required" });
+            return;
+          }
+          const url = await this.shortCreator.saveUploadedImage(image);
+          res.json({ url });
+        } catch (error: unknown) {
+          logger.error(error, "Error uploading image");
+          res.status(500).json({ error: "Failed to upload image" });
         }
       },
     );
