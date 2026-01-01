@@ -122,7 +122,7 @@ export const renderConfig = z.object({
   orientation: z
     .nativeEnum(OrientationEnum)
     .optional()
-    .describe("Orientation of the video, default is portrait"),
+    .describe("Orientation of the video, default is landscape"),
   musicVolume: z
     .nativeEnum(MusicVolumeEnum)
     .optional()

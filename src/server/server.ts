@@ -25,7 +25,7 @@ export class Server {
     });
 
     const apiRouter = new APIRouter(config, shortCreator);
-    const mcpRouter = new MCPRouter(shortCreator);
+    const mcpRouter = new MCPRouter(config, shortCreator);
     this.app.use("/api", apiRouter.router);
     this.app.use("/mcp", mcpRouter.router);
 

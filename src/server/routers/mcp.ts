@@ -5,9 +5,11 @@ import z from "zod";
 
 import { ShortCreator } from "../../short-creator/ShortCreator";
 import { logger } from "../../logger";
+import { Config } from "../../config";
 import {
   renderConfig,
   sceneInput,
+  OrientationEnum,
 } from "../../types/shorts";
 
 export class MCPRouter {
@@ -15,8 +17,10 @@ export class MCPRouter {
   shortCreator: ShortCreator;
   transports: { [sessionId: string]: SSEServerTransport } = {};
   mcpServer: McpServer;
-  constructor(shortCreator: ShortCreator) {
+  private config: Config;
+  constructor(config: Config, shortCreator: ShortCreator) {
     this.router = express.Router();
+    this.config = config;
     this.shortCreator = shortCreator;
 
     this.mcpServer = new McpServer({
@@ -81,6 +85,64 @@ export class MCPRouter {
           ],
         };
       },
+    );
+
+    // New tool: generate-veo-from-blank
+    const generateVeoFromBlankSchema = z.object({
+      prompt: z.string().describe("Animation prompt for Veo (camera motion, atmosphere, visual style)"),
+    });
+
+    this.mcpServer.registerTool(
+      "generate-veo-from-blank",
+      {
+        description: "Generate a Veo 3.1 video from a blank 1080p landscape image using pure Veo mode (no TTS/Whisper/Remotion)",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        inputSchema: generateVeoFromBlankSchema as any,
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (args: any) => {
+        try {
+          const { prompt } = args;
+
+          // Construct blank image URL using localhost
+          const blankImageUrl = `http://localhost:${this.config.port}/static/1080p-blank.png`;
+
+          // Construct scene with imageInput and veoPrompt
+          // Note: text and searchTerms are unused in veoOnly mode but required by schema
+          const scenes = [{
+            text: "",
+            searchTerms: [],
+            imageInput: {
+              type: "upload" as const,
+              value: blankImageUrl,
+            },
+            veoPrompt: prompt,
+          }];
+
+          // Config for Veo-only mode (landscape orientation)
+          const config = {
+            veoOnly: true,
+            orientation: OrientationEnum.landscape,
+          };
+
+          const videoId = await this.shortCreator.addToQueue(scenes, config);
+
+          return {
+            content: [{
+              type: "text" as const,
+              text: videoId,
+            }],
+          };
+        } catch (error) {
+          logger.error(error, "Error generating veo-from-blank video");
+          return {
+            content: [{
+              type: "text" as const,
+              text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+            }],
+          };
+        }
+      }
     );
   }
 

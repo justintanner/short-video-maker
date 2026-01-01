@@ -135,7 +135,7 @@ export class ShortCreator {
     const tempFiles = [];
 
     const orientation: OrientationEnum =
-      config.orientation || OrientationEnum.portrait;
+      config.orientation || OrientationEnum.landscape;
 
     let index = 0;
     for (const scene of inputScenes) {
@@ -339,7 +339,7 @@ export class ShortCreator {
 
     let inputImage = scene.imageInput.value;
     const orientation: OrientationEnum =
-      config.orientation || OrientationEnum.portrait;
+      config.orientation || OrientationEnum.landscape;
     const aspectRatio =
       orientation === OrientationEnum.landscape ? "16:9" : "9:16";
     const prompt =

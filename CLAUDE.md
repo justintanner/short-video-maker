@@ -112,7 +112,7 @@ src/
 - `captionPosition`: top, center, or bottom
 - `captionBackgroundColor`: CSS color for caption background
 - `voice`: Kokoro voice identifier (get options from GET `/api/voices`)
-- `orientation`: portrait or landscape
+- `orientation`: portrait or landscape (default: landscape)
 - `musicVolume`: muted, low, medium, high
 
 ## REST API Endpoints
