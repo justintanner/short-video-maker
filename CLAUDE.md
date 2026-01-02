@@ -12,29 +12,29 @@ The server exposes both a REST API and an MCP (Model Context Protocol) server, p
 
 ### Setup
 ```bash
-pnpm install
+npm install
 cp .env.example .env  # Set PEXELS_API_KEY and other env vars
-pnpm dev
+npm run dev
 ```
 
 ### Build and Run
 ```bash
-pnpm build          # Build TypeScript and Vite (outputs to dist/)
-pnpm start          # Run production build
-pnpm dev            # Development mode with watch
+npm run build       # Build TypeScript and Vite (outputs to dist/)
+npm start           # Run production build
+npm run dev         # Development mode with watch
 ```
 
 ### Testing
 ```bash
-pnpm test           # Run vitest tests
+npm test            # Run vitest tests
 npx remotion studio # Preview videos and debug Remotion rendering
 ```
 
 ### UI Development
 ```bash
-pnpm ui:dev         # Vite dev server for UI
-pnpm ui:build       # Build UI only
-pnpm ui:preview     # Preview UI build
+npm run ui:dev      # Vite dev server for UI
+npm run ui:build    # Build UI only
+npm run ui:preview  # Preview UI build
 ```
 
 ### Docker

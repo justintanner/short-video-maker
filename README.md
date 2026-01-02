@@ -172,7 +172,7 @@ If you are using the [Self-hosted AI starter kit](https://github.com/n8n-io/self
 
 # NPM
 
-While Docker is the recommended way to run the project, you can run it with npm or npx.
+While Docker is the recommended way to run the project, you can run it with npm.
 On top of the general requirements, the following are necessary to run the server.
 
 ## Supported platforms
@@ -261,7 +261,8 @@ You can load it on http://localhost:3123
 ## Available tools
 
 - `create-short-video` Creates a short video - the LLM will figure out the right configuration. If you want to use specific configuration, you need to specify those in you prompt.
-- `get-video-status` Somewhat useless, it’s meant for checking the status of the video, but since the AI agents aren’t really good with the concept of time, you’ll probably will end up using the REST API for that anyway.
+- `get-video-status` Somewhat useless, it's meant for checking the status of the video, but since the AI agents aren't really good with the concept of time, you'll probably will end up using the REST API for that anyway.
+- `images-to-video` Generate a Veo 3.1 video from 1-2 images. Provide a single image to animate it, or two images to create a transition animation. Supports model selection (veo3_fast for speed, veo3 for quality).
 
 # REST API
 
