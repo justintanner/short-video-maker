@@ -32,14 +32,17 @@ async function run() {
     logInfo("Scenes:", JSON.stringify(scenes, null, 2));
     logInfo("Config:", JSON.stringify(config, null, 2));
 
-    const result = await client.callTool({
-      name: "create-short-video",
-      arguments: {
+  // Create video
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result: any = await client.callTool({
+    name: "create-short-video",
+    arguments: {
         scenes,
         config
       },
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const videoId = (result as any).content[0].text;
     logSuccess(`Video queued with ID: ${videoId}`);
 

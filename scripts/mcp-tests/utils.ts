@@ -10,14 +10,17 @@ export interface McpConnection {
   close: () => Promise<void>;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function logInfo(message: string, ...args: any[]) {
   console.log(`ℹ️  ${message}`, ...args);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function logSuccess(message: string, ...args: any[]) {
   console.log(`✅ ${message}`, ...args);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function logError(message: string, ...args: any[]) {
   console.error(`❌ ${message}`, ...args);
 }
@@ -52,7 +55,7 @@ export async function connectToMcpServer(): Promise<McpConnection> {
         try {
           await client.close();
           logInfo("Disconnected from MCP server");
-        } catch (e) {
+        } catch {
           // Ignore close errors
         }
       }
@@ -84,6 +87,7 @@ export async function pollVideoStatus(client: Client, videoId: string, timeoutMi
         arguments: { videoId },
       });
       
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const content = (result as any).content[0];
       const rawText = content.text;
       

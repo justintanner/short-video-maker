@@ -1,7 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import nock from 'nock';
-import path from 'path';
 import { ShortCreator } from '../ShortCreator';
 import { VeoAPI } from '../libraries/Veo';
 import { Config } from '../../config';
@@ -40,7 +39,7 @@ vi.mock('fs-extra', async () => {
       removeSync: vi.fn((path) => mockFiles.delete(path)),
       unlink: vi.fn((path, cb) => {
           mockFiles.delete(path);
-          cb && cb();
+          if (cb) cb(null);
       }),
       readdirSync: vi.fn().mockReturnValue([]),
     }
@@ -95,13 +94,15 @@ describe('ShortCreator - Veo Integration', () => {
     veoApi = new VeoAPI(config.veoApiKey);
 
     // Mock other dependencies
-    const remotion = { render: vi.fn() } as any;
-    const kokoro = { generate: vi.fn() } as any;
-    const whisper = {} as any;
-    const ffmpeg = {} as any;
-    const pexelsApi = {} as any;
-    const nanoBananaPro = {} as any;
-    const musicManager = { musicList: vi.fn().mockReturnValue([]) } as any;
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const remotion = { render: vi.fn() } as unknown as any;
+    const kokoro = { generate: vi.fn() } as unknown as any;
+    const whisper = {} as unknown as any;
+    const ffmpeg = {} as unknown as any;
+    const pexelsApi = {} as unknown as any;
+    const nanoBananaPro = {} as unknown as any;
+    const musicManager = { musicList: vi.fn().mockReturnValue([]) } as unknown as any;
+    /* eslint-enable @typescript-eslint/no-explicit-any */
 
     shortCreator = new ShortCreator(
       config,

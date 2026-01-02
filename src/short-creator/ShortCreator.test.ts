@@ -62,6 +62,7 @@ vi.mock("fs-extra", async () => {
         },
       });
       // Add close method which is expected by the implementation
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (stream as any).close = vi.fn();
       return stream;
     }),

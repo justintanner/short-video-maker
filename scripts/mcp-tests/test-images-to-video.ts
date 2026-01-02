@@ -23,6 +23,7 @@ async function run() {
       },
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const videoId1 = (result1 as any).content[0].text;
     logSuccess(`Video queued with ID: ${videoId1}`);
 
@@ -47,6 +48,7 @@ async function run() {
       },
     });
     
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const videoId2 = (result2 as any).content[0].text;
     logSuccess(`Video queued with ID: ${videoId2}`);
     
