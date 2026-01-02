@@ -117,10 +117,34 @@ export class APIRouter {
           });
           return;
         }
-        const status = this.shortCreator.status(videoId);
-        res.status(200).json({
-          status,
-        });
+
+        const includeError = req.query.includeError === 'true';
+
+        if (includeError) {
+          const statusDetail = this.shortCreator.statusDetail(videoId);
+          res.status(200).json(statusDetail);
+        } else {
+          const status = this.shortCreator.status(videoId);
+          res.status(200).json({
+            status,
+          });
+        }
+      },
+    );
+
+    this.router.get(
+      "/short-video/:videoId/status-detail",
+      async (req: ExpressRequest, res: ExpressResponse) => {
+        const { videoId } = req.params;
+        if (!videoId) {
+          res.status(400).json({
+            error: "videoId is required",
+          });
+          return;
+        }
+
+        const statusDetail = this.shortCreator.statusDetail(videoId);
+        res.status(200).json(statusDetail);
       },
     );
 

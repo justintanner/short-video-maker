@@ -44,6 +44,13 @@ export const sceneInput = z.object({
       value: z.string(), // URL for upload/generate result
     })
     .optional(),
+  endImageInput: z
+    .object({
+      type: z.enum(["upload", "generate"]),
+      value: z.string(),
+    })
+    .optional()
+    .describe("Optional end frame for Veo animations. If omitted, imageInput is used for both start and end"),
   veoPrompt: z
     .string()
     .optional()
@@ -94,6 +101,11 @@ export enum MusicVolumeEnum {
   high = "high",
 }
 
+export enum VeoModelEnum {
+  veo3 = "veo3",
+  veo3_fast = "veo3_fast",
+}
+
 export const renderConfig = z.object({
   paddingBack: z
     .number()
@@ -132,10 +144,16 @@ export const renderConfig = z.object({
     .optional()
     .default(false)
     .describe("When true, skip TTS/Whisper/Remotion and return raw Veo video"),
+  veoModel: z
+    .nativeEnum(VeoModelEnum)
+    .optional()
+    .default(VeoModelEnum.veo3_fast)
+    .describe("Veo model: veo3_fast for speed, veo3 for quality"),
 });
 export type RenderConfig = z.infer<typeof renderConfig>;
 
 export type Voices = `${VoiceEnum}`;
+export type VeoModel = `${VeoModelEnum}`;
 
 export type Video = {
   id: string;
@@ -165,6 +183,18 @@ export const createShortInput = z.object({
 export type CreateShortInput = z.infer<typeof createShortInput>;
 
 export type VideoStatus = "processing" | "ready" | "failed";
+
+export type VideoStatusDetail = {
+  status: VideoStatus;
+  error?: {
+    name: string;
+    message: string;
+    veoMessage?: string;
+    prompt?: string;
+    statusCode?: number;
+    timestamp: string;
+  };
+};
 
 export type Music = {
   file: string;

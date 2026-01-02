@@ -4,12 +4,14 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import z from "zod";
 
 import { ShortCreator } from "../../short-creator/ShortCreator";
+import { VeoError } from "../../short-creator/libraries/VeoErrors";
 import { logger } from "../../logger";
 import { Config } from "../../config";
 import {
   renderConfig,
   sceneInput,
   OrientationEnum,
+  VeoModelEnum,
 } from "../../types/shorts";
 
 export class MCPRouter {
@@ -40,19 +42,35 @@ export class MCPRouter {
     this.mcpServer.registerTool(
       "get-video-status",
       {
-        description: "Get the status of a video (ready, processing, failed)",
+        description: "Get the status of a video (ready, processing, failed). Returns detailed error information if failed.",
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         inputSchema: getVideoStatusSchema as any,
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async (args: any) => {
         const { videoId } = args;
-        const status = this.shortCreator.status(videoId);
+        const statusDetail = this.shortCreator.statusDetail(videoId);
+
+        let responseText: string;
+        if (statusDetail.status === 'failed' && statusDetail.error) {
+          responseText = JSON.stringify({
+            status: statusDetail.status,
+            error: {
+              type: statusDetail.error.name,
+              message: statusDetail.error.message,
+              ...(statusDetail.error.veoMessage && { veoMessage: statusDetail.error.veoMessage }),
+              ...(statusDetail.error.prompt && { prompt: statusDetail.error.prompt }),
+            },
+          }, null, 2);
+        } else {
+          responseText = statusDetail.status;
+        }
+
         return {
           content: [
             {
               type: "text" as const,
-              text: status,
+              text: responseText,
             },
           ],
         };
@@ -87,41 +105,68 @@ export class MCPRouter {
       },
     );
 
-    // New tool: generate-veo-from-blank
-    const generateVeoFromBlankSchema = z.object({
-      prompt: z.string().describe("Animation prompt for Veo (camera motion, atmosphere, visual style)"),
+    // New tool: images-to-video
+    const imagesToVideoSchema = z.object({
+      imageUrls: z
+        .array(z.string().url())
+        .min(1)
+        .max(2)
+        .describe("1-2 image URLs. If only 1 provided, it will be used for both start and end frames"),
+      prompt: z
+        .string()
+        .describe("Animation prompt for Veo (camera motion, atmosphere, visual style)"),
+      model: z
+        .enum(["veo3_fast", "veo3"])
+        .optional()
+        .default("veo3_fast")
+        .describe("Veo model: veo3_fast for speed (default), veo3 for quality"),
     });
 
     this.mcpServer.registerTool(
-      "generate-veo-from-blank",
+      "images-to-video",
       {
-        description: "Generate a Veo 3.1 video from a blank 1080p landscape image using pure Veo mode (no TTS/Whisper/Remotion)",
+        description: "Generate a Veo 3.1 video from 1-2 images using image-to-video animation. Provide 1 image to animate it, or 2 images to transition between them.",
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        inputSchema: generateVeoFromBlankSchema as any,
+        inputSchema: imagesToVideoSchema as any,
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async (args: any) => {
         try {
-          const { prompt } = args;
+          const { imageUrls, prompt, model = "veo3_fast" } = args;
 
-          // Construct blank image URL using localhost
-          const blankImageUrl = `http://localhost:${this.config.port}/static/1080p-blank.png`;
+          // Handle 1 or 2 image URLs
+          let startImageUrl: string;
+          let endImageUrl: string;
 
-          // Construct scene with imageInput and veoPrompt
-          // Note: text and searchTerms are unused in veoOnly mode but required by schema
+          if (imageUrls.length === 1) {
+            startImageUrl = imageUrls[0];
+            endImageUrl = imageUrls[0]; // Use same image for both frames
+          } else {
+            startImageUrl = imageUrls[0];
+            endImageUrl = imageUrls[1];
+          }
+
+          // Construct scene with imageInput and optional endImageInput
           const scenes = [{
             text: "",
             searchTerms: [],
             imageInput: {
               type: "upload" as const,
-              value: blankImageUrl,
+              value: startImageUrl,
             },
+            ...(imageUrls.length === 2 && {
+              endImageInput: {
+                type: "upload" as const,
+                value: endImageUrl,
+              }
+            }),
             veoPrompt: prompt,
           }];
 
-          // Config for Veo-only mode (landscape orientation)
+          // Config for Veo-only mode with selected model
           const config = {
             veoOnly: true,
+            veoModel: model,
             orientation: OrientationEnum.landscape,
           };
 
@@ -134,11 +179,24 @@ export class MCPRouter {
             }],
           };
         } catch (error) {
-          logger.error(error, "Error generating veo-from-blank video");
+          logger.error(error, "Error generating images-to-video");
+
+          let errorMessage: string;
+          if (error instanceof VeoError) {
+            errorMessage = JSON.stringify({
+              error: error.name,
+              message: error.message,
+              ...(error.veoMessage && { veoMessage: error.veoMessage }),
+              ...(error.prompt && { prompt: error.prompt }),
+            }, null, 2);
+          } else {
+            errorMessage = `Error: ${error instanceof Error ? error.message : "Unknown error"}`;
+          }
+
           return {
             content: [{
               type: "text" as const,
-              text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+              text: errorMessage,
             }],
           };
         }

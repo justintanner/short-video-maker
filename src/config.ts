@@ -47,6 +47,7 @@ export class Config {
   public whisperVersion: string = whisperVersion;
   public whisperModel: whisperModels = defaultWhisperModel;
   public kokoroModelPrecision: kokoroModelPrecision = "fp32";
+  public veoMaxRetries: number = 2;
 
   // docker-specific, performance-related settings to prevent memory issues
   public concurrency?: number;
@@ -89,6 +90,9 @@ export class Config {
     if (process.env.KOKORO_MODEL_PRECISION) {
       this.kokoroModelPrecision = process.env
         .KOKORO_MODEL_PRECISION as kokoroModelPrecision;
+    }
+    if (process.env.VEO_MAX_RETRIES) {
+      this.veoMaxRetries = parseInt(process.env.VEO_MAX_RETRIES);
     }
 
     this.concurrency = process.env.CONCURRENCY

@@ -12,6 +12,7 @@ import { Whisper } from "./libraries/Whisper";
 import { FFMpeg } from "./libraries/FFmpeg";
 import { PexelsAPI } from "./libraries/Pexels";
 import { VeoAPI } from "./libraries/Veo";
+import { VeoError } from "./libraries/VeoErrors";
 import { NanoBananaPro } from "./libraries/NanoBananaPro";
 import { Config } from "../config";
 import { logger } from "../logger";
@@ -21,6 +22,7 @@ import type {
   RenderConfig,
   Scene,
   VideoStatus,
+  VideoStatusDetail,
   MusicMoodEnum,
   MusicTag,
   MusicForVideo,
@@ -32,6 +34,14 @@ export class ShortCreator {
     config: RenderConfig;
     id: string;
   }[] = [];
+  private videoErrors: Map<string, {
+    name: string;
+    message: string;
+    veoMessage?: string;
+    prompt?: string;
+    statusCode?: number;
+    timestamp: string;
+  }> = new Map();
   constructor(
     private config: Config,
     private remotion: Remotion,
@@ -53,6 +63,16 @@ export class ShortCreator {
       return "ready";
     }
     return "failed";
+  }
+
+  public statusDetail(id: string): VideoStatusDetail {
+    const status = this.status(id);
+    const error = this.videoErrors.get(id);
+
+    return {
+      status,
+      ...(error && { error }),
+    };
   }
 
   public async generateImage(prompt: string): Promise<string> {
@@ -104,7 +124,30 @@ export class ShortCreator {
       await this.createShort(id, sceneInput, config);
       logger.debug({ id }, "Video created successfully");
     } catch (error: unknown) {
-      logger.error(error, "Error creating video");
+      // Capture detailed error information
+      if (error instanceof VeoError) {
+        logger.error({
+          error: error.toJSON(),
+          videoId: id
+        }, "Veo error creating video");
+
+        this.videoErrors.set(id, {
+          name: error.name,
+          message: error.message,
+          veoMessage: error.veoMessage,
+          prompt: error.prompt,
+          statusCode: error.statusCode,
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        logger.error(error, "Error creating video");
+
+        this.videoErrors.set(id, {
+          name: 'UnknownError',
+          message: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString(),
+        });
+      }
     } finally {
       this.queue.shift();
       this.processQueue();
@@ -180,13 +223,16 @@ export class ShortCreator {
 
         const aspectRatio = orientation === OrientationEnum.landscape ? "16:9" : "9:16";
         const prompt = scene.veoPrompt || scene.text || scene.searchTerms.join(", ");
+        const veoModel = config.veoModel || "veo3_fast";
 
         try {
           const veoUrl = await this.veoApi.generateVideo(
             prompt,
             inputImage,   // Start frame
             inputImage,   // End frame (same image)
-            aspectRatio
+            aspectRatio,
+            veoModel,
+            this.config.veoMaxRetries
           );
           
           logger.debug(`Downloading Veo video from ${veoUrl} to ${tempVideoPath}`);
@@ -217,9 +263,20 @@ export class ShortCreator {
           
           videoUrl = `http://localhost:${this.config.port}/api/tmp/${tempVideoFileName}`;
         } catch (error) {
-           logger.error(error, "Failed to generate/download Veo video, falling back to static image");
+          if (error instanceof VeoError) {
+            logger.warn({
+              error: error.toJSON(),
+              scene: {
+                text: scene.text,
+                veoPrompt: scene.veoPrompt,
+                imageUrl: inputImage
+              }
+            }, "Veo generation failed, falling back to static image");
+          } else {
+            logger.error(error, "Failed to generate/download Veo video, falling back to static image");
+          }
         }
-        
+
         if (!videoUrl) {
            imageUrl = inputImage;
         }
@@ -379,12 +436,48 @@ export class ShortCreator {
 
     logger.debug({ prompt, inputImage, aspectRatio }, "Generating Veo video");
 
-    // Generate video with Veo (start and end frames are the same image URL)
+    // Handle endImageInput if provided
+    let endImage = inputImage; // Default to same image
+    if (scene.endImageInput && scene.endImageInput.value) {
+      endImage = scene.endImageInput.value;
+
+      // Handle localhost URLs for end image
+      if (endImage.includes("localhost") || endImage.includes("127.0.0.1")) {
+        logger.debug(
+          { originalUrl: endImage },
+          "Detected localhost URL for end frame, uploading to Veo",
+        );
+
+        const urlPath = new URL(endImage).pathname;
+        const fileName = path.basename(urlPath);
+
+        let filePath: string;
+        if (urlPath.startsWith("/static/")) {
+          filePath = path.join(process.cwd(), "static", fileName);
+        } else if (urlPath.startsWith("/api/tmp/")) {
+          filePath = path.join(this.config.tempDirPath, fileName);
+        } else {
+          throw new Error(`Unsupported URL path: ${urlPath}`);
+        }
+
+        if (!fs.existsSync(filePath)) {
+          throw new Error(`End frame file not found: ${filePath}`);
+        }
+
+        endImage = await this.veoApi.uploadFile(filePath);
+        logger.debug({ publicUrl: endImage }, "End frame uploaded to Veo");
+      }
+    }
+
+    // Generate video with Veo (start and end frames may be same or different)
+    const veoModel = config.veoModel || "veo3_fast";
     const veoUrl = await this.veoApi.generateVideo(
       prompt,
       inputImage, // Start frame
-      inputImage, // End frame (same image)
+      endImage,   // End frame (may be same or different)
       aspectRatio,
+      veoModel,
+      this.config.veoMaxRetries
     );
 
     // Download the video directly to final location (not temp)
