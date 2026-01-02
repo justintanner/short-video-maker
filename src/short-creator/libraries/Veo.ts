@@ -5,6 +5,12 @@ import path from "path";
 import { logger } from "../../logger";
 import { VeoError, VeoContentPolicyError, VeoAPIError, VeoTimeoutError, isRetryableVeoError } from './VeoErrors';
 
+interface VeoErrorResponse {
+  code?: string;
+  msg?: string;
+  data?: unknown;
+}
+
 interface VeoGenerateRequest {
   prompt: string;
   imageUrls?: string[];
@@ -178,7 +184,7 @@ export class VeoAPI {
 
       } catch (error) {
         if (axios.isAxiosError(error) && error.response) {
-          const data = error.response.data as any;
+          const data = error.response.data as VeoErrorResponse;
           lastError = new VeoAPIError(
             'Veo API request failed',
             error.response.status,

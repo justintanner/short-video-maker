@@ -11,7 +11,6 @@ import {
   renderConfig,
   sceneInput,
   OrientationEnum,
-  VeoModelEnum,
 } from "../../types/shorts";
 
 export class MCPRouter {
