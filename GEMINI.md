@@ -8,7 +8,7 @@ Short Video Maker is an automated tool for generating short-form videos (TikTok,
 It orchestrates several technologies:
 - **TTS**: Kokoro (local/downloaded model)
 - **Captions**: Whisper.cpp
-- **Background**: Pexels API (stock videos)
+- **Background**: Pexels API (stock videos) or Veo (AI generation)
 - **Composition**: Remotion (React-based video rendering)
 - **Audio**: FFmpeg
 
@@ -51,7 +51,7 @@ It orchestrates several technologies:
 2. **Scene Processing**:
    - Text -> Audio (Kokoro)
    - Audio -> Captions (Whisper)
-   - Search -> Video (Pexels)
+   - Search -> Video (Pexels) OR Prompt -> Video (Veo)
 3. **Composition**: All assets assembled in Remotion `src/components/videos/`.
 
 ## Common Tasks
