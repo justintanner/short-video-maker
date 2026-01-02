@@ -2,6 +2,8 @@ process.env.LOG_LEVEL = "debug";
 
 import { test, expect, vi } from "vitest";
 import fs from "fs-extra";
+import nock from "nock";
+import { Writable } from "stream";
 
 import { ShortCreator } from "./ShortCreator";
 import { Kokoro } from "./libraries/Kokoro";
@@ -10,6 +12,7 @@ import { Whisper } from "./libraries/Whisper";
 import { FFMpeg } from "./libraries/FFmpeg";
 import { PexelsAPI } from "./libraries/Pexels";
 import { NanoBananaPro } from "./libraries/NanoBananaPro";
+import { VeoAPI } from "./libraries/Veo";
 import { Config } from "../config";
 import { MusicManager } from "./music";
 
@@ -52,11 +55,16 @@ vi.mock("fs-extra", async () => {
         // ignore
       }
     }),
-    createWriteStream: vi.fn(() => ({
-      on: vi.fn(),
-      write: vi.fn(),
-      end: vi.fn(),
-    })),
+    createWriteStream: vi.fn(() => {
+      const stream = new Writable({
+        write(chunk, encoding, callback) {
+          callback();
+        },
+      });
+      // Add close method which is expected by the implementation
+      (stream as any).close = vi.fn();
+      return stream;
+    }),
     readFileSync: vi.fn((path) => {
       return memfs.readFileSync(path);
     }),
@@ -93,13 +101,21 @@ vi.mock("fluent-ffmpeg", () => {
 // mock kokoro-js
 vi.mock("kokoro-js", () => {
   return {
+    TextSplitterStream: vi.fn().mockImplementation(() => ({
+      push: vi.fn(),
+      close: vi.fn(),
+    })),
     KokoroTTS: {
       from_pretrained: vi.fn().mockResolvedValue({
-        generate: vi.fn().mockResolvedValue({
-          toWav: vi.fn().mockReturnValue(new ArrayBuffer(8)),
-          audio: new ArrayBuffer(8),
-          sampling_rate: 44100,
-        }),
+        stream: vi.fn().mockReturnValue((async function* () {
+          yield {
+             audio: {
+                toWav: vi.fn().mockReturnValue(new ArrayBuffer(44)),
+                audio: new ArrayBuffer(8),
+                sampling_rate: 44100
+             }
+          };
+        })()),
       }),
     },
   };
@@ -162,6 +178,10 @@ test("test me", async () => {
     height: 1920,
   });
 
+  nock("https://example.com")
+    .get("/mock-video-1.mp4")
+    .reply(200, "mock video content");
+
   const config = new Config();
   const remotion = await Remotion.init(config);
 
@@ -184,6 +204,7 @@ test("test me", async () => {
 
   const musicManager = new MusicManager(config);
   const nanoBananaPro = new NanoBananaPro(config.tempDirPath);
+  const veoApi = new VeoAPI(config.veoApiKey);
 
   const shortCreator = new ShortCreator(
     config,
@@ -192,6 +213,7 @@ test("test me", async () => {
     whisper,
     ffmpeg,
     pexelsAPI,
+    veoApi,
     nanoBananaPro,
     musicManager,
   );
